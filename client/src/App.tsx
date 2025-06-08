@@ -7,7 +7,7 @@ export default function App() {
   const [chat, setChat] = useState<{ user: string; message: string }[]>([]);
 
   const login = () => {
-    const s = io("http://localhost:3000", { auth: { password } });
+    const s = io("https://moonlight-tyrst.onrender.com", { auth: { password } });
     s.on("connect_error", (err) => alert(err.message));
     s.on("connect", () => setSocket(s));
     s.on("message", (m) => setChat((c) => [...c, m]));
