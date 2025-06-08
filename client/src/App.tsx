@@ -1,67 +1,42 @@
 import { useState } from "react";
 import { io, Socket } from "socket.io-client";
+import Login from "./components/Login";
+import Header from "./components/Header";
+import ChatWindow from "./components/ChatWindow";
+import ChatInput from "./components/ChatInput";
 
+type Msg = { user: string; message: string; time: number };
+
+// https://moonlight-tyrst.onrender.com
+// http://localhost:3000
 export default function App() {
-  const [password, setPassword] = useState("");
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [chat, setChat] = useState<{ user: string; message: string }[]>([]);
+  const [user, setUser] = useState("");
+  const [chat, setChat] = useState<Msg[]>([]);
 
-  const login = () => {
-    const s = io("https://moonlight-tyrst.onrender.com", { auth: { password } });
+  const handleLogin = (password: string) => {
+    const s = io("https://moonlight-tyrst.onrender.com", {
+      auth: { password },
+    });
+    s.on("history", (msgs: Msg[]) => setChat(msgs));
     s.on("connect_error", (err) => alert(err.message));
-    s.on("connect", () => setSocket(s));
-    s.on("message", (m) => setChat((c) => [...c, m]));
+    s.on("user", (data: { user: string }) => setUser(data.user));
+    s.on("message", (m: Msg) => setChat((c) => [...c, m]));
+    s.on("connect", () => {
+      setSocket(s);
+      s.emit("user");
+    });
   };
-
-  const send = (msg: string) => socket?.emit("message", msg);
-
-  if (!socket) {
-    return (
-      <div>
-        <h2>Login</h2>
-        <input
-          type="password"
-          placeholder="Enter password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button onClick={login}>Login</button>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h2>Chat</h2>
-      <ul>
-        {chat.map((c, i) => (
-          <li key={i}>
-            <b>{c.user}:</b> {c.message}
-          </li>
-        ))}
-      </ul>
-      <ChatInput onSend={send} />
+  const sendMsg = (msg: string) => socket?.emit("message", msg);
+  return socket ? (
+    <div className="flex flex-col min-h-screen bg-black">
+      <Header user={user} />
+      <ChatWindow chat={chat} currentUser={user} />
+      <footer className="fixed bottom-0 inset-x-0 bg-black border-t p-2">
+        <ChatInput onSend={sendMsg} />
+      </footer>
     </div>
-  );
-}
-
-function ChatInput({ onSend }: { onSend: (msg: string) => void }) {
-  const [msg, setMsg] = useState("");
-  return (
-    <div>
-      <input
-        value={msg}
-        onChange={(e) => setMsg(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && (onSend(msg), setMsg(""))}
-      />
-      <button
-        onClick={() => {
-          onSend(msg);
-          setMsg("");
-        }}
-      >
-        Send
-      </button>
-    </div>
+  ) : (
+    <Login onLogin={handleLogin} />
   );
 }

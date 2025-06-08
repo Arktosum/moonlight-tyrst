@@ -1,14 +1,23 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = __importDefault(require("express"));
-const http_1 = __importDefault(require("http"));
-const socket_io_1 = require("socket.io");
-const app = (0, express_1.default)();
-const server = http_1.default.createServer(app);
-const io = new socket_io_1.Server(server, { cors: { origin: '*' } });
+import express from 'express';
+import http from 'http';
+import { Server } from 'socket.io';
+import { open } from 'sqlite';
+import sqlite3 from 'sqlite3';
+const app = express();
+const db = await open({ filename: 'chat.db', driver: sqlite3.Database });
+await db.exec(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user TEXT,
+    message TEXT,
+    time INTEGER
+  );
+`);
+app.get("/", (req, res) => {
+    res.send("<h1>Welcome to the backend!</h1>");
+});
+const server = http.createServer(app);
+const io = new Server(server, { cors: { origin: '*' } });
 const pwdToName = { blue: 'Alice', red: 'Bob', green: 'Charlie' };
 io.use((socket, next) => {
     const { password } = socket.handshake.auth;
@@ -17,11 +26,21 @@ io.use((socket, next) => {
     socket.data.user = pwdToName[password];
     next();
 });
-io.on('connection', (socket) => {
+io.on('connection', async (socket) => {
     const name = socket.data.user;
-    console.log(`${name} connected`);
-    socket.on('message', (msg) => {
-        io.emit('message', { user: name, message: msg });
+    const rows = await db.all('SELECT user, message, time FROM messages ORDER BY id');
+    socket.emit('history', rows);
+    socket.on('user', () => {
+        socket.emit('user', { user: name });
+    });
+    socket.on('message', async (msg) => {
+        const now = Date.now(); // Unix ms
+        await db.run('INSERT INTO messages (user, message, time) VALUES (?, ?, ?)', name, msg, now);
+        io.emit('message', {
+            user: socket.data.user,
+            message: msg,
+            time: now,
+        });
     });
 });
 server.listen(3000, () => console.log('Server up on 3000'));
